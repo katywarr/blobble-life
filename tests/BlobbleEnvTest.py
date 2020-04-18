@@ -1,6 +1,5 @@
 import unittest
-from .context import environment
-from environment.BlobbleEnv_v1 import BlobbleEnv
+from gym_blobble.envs.blobble_env import BlobbleEnv
 
 
 class TestBlobbleEnv(unittest.TestCase):

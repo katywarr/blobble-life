@@ -4,7 +4,7 @@ import gym
 import numpy as np
 import plotly.graph_objects as go
 
-from gym import spaces
+from gym import spaces, error, utils
 from gym.utils import seeding
 
 
@@ -16,8 +16,8 @@ class BlobbleEnv(gym.Env):
     Observation:
         Type: Box(3)
         Num     Observation                         Min             Max
-        0       Blobble X location                  MIN_LOC+1 (1)   MAX_LOC-1 (9)
-        1       Blobble Y location                  MIN_LOC+1 (1)   MAX_LOC-1 (9)
+        0       Blobble X location                  MIN_LOC(-10)    MAX_LOC (10)
+        1       Blobble Y location                  MIN_LOC(-10)    MAX_LOC (10)
         2       Food nutritional value at location  -5              +5     (set to zero if no food)
 
     Action
@@ -41,12 +41,21 @@ class BlobbleEnv(gym.Env):
 
         super(BlobbleEnv, self).__init__()
 
-        # Initialise aspects of the environment that never change
+        self.action_space = spaces.Discrete(9)
+
+        self._MAX_LOC = 10
+        self._MIN_LOC = -self._MAX_LOC
+        high_values = np.array([self._MAX_LOC,
+                                self._MAX_LOC,
+                                5],
+                        dtype=np.float32)
+        self.observation_space = spaces.Box(-high_values, high_values, dtype=np.float32)
+
+        # Initialise aspects of the envs that never change
         self._MAX_HEALTH = 10
         max_bubble_size = 50
         self._SIZE_REF = 2. * self._MAX_HEALTH / (max_bubble_size ** 2)  # For scaling blobbles and food
-        self._MAX_LOC = 10
-        self._MIN_LOC = -10
+
         self._MAX_FOOD = 100
         self._HEALTH_COLOURS = ['rgb(243, 224, 247)',
                                 'rgb(228, 199, 241)',
@@ -56,6 +65,7 @@ class BlobbleEnv(gym.Env):
                                 'rgb(130, 109, 186)',
                                 'rgb(99, 85, 159)']
         self._episode = 0
+
         self.seed()
         # Reset the world to its start position
         self.reset()
@@ -218,6 +228,9 @@ class BlobbleEnv(gym.Env):
             img_as_bytes = fig.to_image(format='png')
             np_img = np.array(Image.open(io.BytesIO(img_as_bytes)))
             return np_img
+
+    def close(self):
+        print('Closing Blobble World')
 
     def render_print(self):
         print('Blobble details are:')
