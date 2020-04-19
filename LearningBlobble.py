@@ -2,40 +2,26 @@ from gym_blobble.envs import BlobbleEnv
 import imageio as imageio
 import numpy as np
 import tensorflow as tf
+import matplotlib.pyplot as plt
 
 from tf_agents.environments import suite_gym
 from tf_agents.environments import tf_py_environment
-from tf_agents.eval import metric_utils
-from tf_agents.metrics import tf_metrics
 from tf_agents.networks import q_network
 from tf_agents.policies import random_tf_policy
 from tf_agents.replay_buffers import tf_uniform_replay_buffer
 from tf_agents.trajectories import trajectory
 from tf_agents.utils import common
 from tf_agents.agents.dqn import dqn_agent
-from tf_agents.drivers import dynamic_step_driver
-
-from PIL import Image
-
-num_iterations = 100
 
 
 def collect_step(environment, policy, buffer):
-    print('collect step')
     time_step = environment.current_time_step()
     action_step = policy.action(time_step)
     next_time_step = environment.step(action_step.action)
     traj = trajectory.from_transition(time_step, action_step, next_time_step)
 
-    print(traj)
     # Add trajectory to the replay buffer
     buffer.add_batch(traj)
-
-
-def collect_data(env, policy, buffer, steps):
-    print('collecting data for ', steps, ' steps')
-    for _ in range(steps):
-        collect_step(env, policy, buffer)
 
 
 def create_blobble_video(video_filename, num_episodes=1, fps=30):
@@ -52,7 +38,7 @@ def create_blobble_video(video_filename, num_episodes=1, fps=30):
     print(num_actions)
 
     with imageio.get_writer(filename, fps=fps) as video:
-        for i in range(num_episodes - 1):
+        for i in range(num_episodes):
             print('Episode: ' + str(i))
             blobble_env.reset([0, 0, 10])
             done = False
@@ -68,8 +54,7 @@ def create_blobble_video(video_filename, num_episodes=1, fps=30):
 
 def compute_avg_return(environment, policy, num_episodes=10):
     total_return = 0.0
-    for _ in range(num_episodes):
-
+    for i in range(num_episodes):
         time_step = environment.reset()
         episode_return = 0.0
 
@@ -80,16 +65,22 @@ def compute_avg_return(environment, policy, num_episodes=10):
         total_return += episode_return
 
     avg_return = total_return / num_episodes
+
     return avg_return.numpy()[0]
 
 
-def train_agent(agent, train_env, eval_env,
-                dataset_iterator,
-                replay_buffer,
-                num_eval_episodes=10,
-                log_interval=200,
-                eval_interval=1000,
-                collect_steps_per_iteration=1):
+def train_neural_network(agent,
+                         train_env,
+                         eval_env,
+                         num_eval_episodes=10,
+                         log_interval=200,
+                         eval_interval=1000,
+                         collect_steps_per_iteration=1):
+
+    print('Train the Network')
+    replay_buffer_max_length = 100000
+    num_iterations = 1000
+
     # (Optional) Optimize by wrapping some of the code in a graph using TF function.
     agent.train = common.function(agent.train)
 
@@ -99,17 +90,45 @@ def train_agent(agent, train_env, eval_env,
     # Evaluate the agent's policy once before training.
     avg_return = compute_avg_return(eval_env, agent.policy, num_eval_episodes)
     returns = [avg_return]
+    print('Average return (initial): ', avg_return)
 
-    for _ in range(num_iterations):
+    '''
+    collect_data_spec returns a trajectory spec
+    A trajectory spec is a tuple that contains:
+    - the state of the environment in some time step (observation)
+    - the action that the agent should take in that state (action)
+    - the state in which the environment will be after the action is taken
+    '''
+    replay_buffer = tf_uniform_replay_buffer.TFUniformReplayBuffer(
+        data_spec=agent.collect_data_spec,
+        batch_size=train_env.batch_size,
+        max_length=replay_buffer_max_length)
+
+    '''
+    The agent needs access to the replay buffer. 
+    This is provided by creating an iterable tf.data.Dataset pipeline which will feed data to the agent.
+
+    Each row of the replay buffer only stores a single observation step. 
+    But since the DQN Agent needs both the current and next observation to compute the loss, 
+    the dataset pipeline will sample two adjacent rows for each item in the batch (num_steps=2).
+    '''
+    dataset = replay_buffer.as_dataset(
+        num_parallel_calls=3,
+        sample_batch_size=64,
+        num_steps=2).prefetch(3)
+
+    dataset_iterator = iter(dataset)
+
+    for i in range(num_iterations):
 
         # Collect a few steps using collect_policy and save to the replay buffer.
+        collect_steps_per_iteration = 2
         for _ in range(collect_steps_per_iteration):
             collect_step(train_env, agent.collect_policy, replay_buffer)
 
         # Sample a batch of data from the buffer and update the agent's network.
         experience, unused_info = next(dataset_iterator)
         train_loss = agent.train(experience).loss
-
         step = agent.train_step_counter.numpy()
 
         if step % log_interval == 0:
@@ -120,11 +139,20 @@ def train_agent(agent, train_env, eval_env,
             print('step = {0}: Average Return = {1}'.format(step, avg_return))
             returns.append(avg_return)
 
+    iterations = range(0, num_iterations + 1, eval_interval)
+    plt.plot(iterations, returns)
+    plt.ylabel('Average Return')
+    plt.xlabel('Iterations')
+    # plt.ylim(top=250)
+    plt.ion()  # Turn on interactive mode so the following line is non-blocking
+    plt.show()
+
 
 def create_neural_network_agent(env):
     # Create a neural network that can learn to predict the QValues (expected returns) for all the possible
     # Blobble actions, given a specific observation
-    fc_layer_params = (100,)
+    # fc_layer_params = (100,)
+    fc_layer_params = (75, 40)
 
     q_net = q_network.QNetwork(
         env.observation_spec(),
@@ -151,33 +179,27 @@ def create_neural_network_agent(env):
     return agent
 
 
-'''
-Each policy returns an action (0...8).
-    When the policy uses a learned model, the policy will depend on the predictions from the model.
-    Create two policies:
-    - One is for the evaluation and deployment (the agent.policy)
-    - One is for the data collction (the agent.collect_policy)
-'''
-
-
-def get_policies_for_agent(self, agent):
-    eval_policy = agent.policy
-    collect_policy = agent.collect_policy
-    return eval_policy, collect_policy
-
-
-class BlobbleAgent():
+class QNetworkAgent():
+    """
+    Wrapper class to provide a Deep Neural Network agent for any provided tf-agent environment.
+    """
 
     def __init__(self, env_name='blobble-world-v0'):
+        """
+        Initalise the agent by training a neural network for the passed tf-agent environment
+
+        :param env_name:
+        Name of environment for the agent so solve
+        """
         self._env_name = env_name
 
         # Create training and evaluation environments
-        train_py_env = suite_gym.load(self._env_name)
-        eval_py_env = suite_gym.load(self._env_name)
+        self._train_py_env = suite_gym.load(self._env_name)
+        self._eval_py_env = suite_gym.load(self._env_name)
 
         # Convert the training and test environments to Tensors
-        self._train_env = tf_py_environment.TFPyEnvironment(train_py_env)
-        self._eval_env = tf_py_environment.TFPyEnvironment(eval_py_env)
+        self._train_env = tf_py_environment.TFPyEnvironment(self._train_py_env)
+        self._eval_env = tf_py_environment.TFPyEnvironment(self._eval_py_env)
         print('=====================================================')
         print('Environments created for : ', self._env_name)
         print('Training Environment')
@@ -196,98 +218,79 @@ class BlobbleAgent():
         print('    ', self._eval_env.action_spec())
         print('=====================================================')
 
-        self._training_agent = create_neural_network_agent(self._train_env)
+        print('Create and train a neural network agent')
+        self._neural_network_agent = create_neural_network_agent(self._train_env)
 
-    '''
-    get_baseline_performance
-    
-    Establish a baseline performance based on a random agent
-    '''
+        train_neural_network(self._neural_network_agent,
+                             self._train_env,
+                             self._eval_env,
+                             num_eval_episodes=10,
+                             log_interval=200,
+                             eval_interval=1000,
+                             collect_steps_per_iteration=1)
 
-    def get_baseline_performance(self, iterations=100):
+
+    def get_random_baseline_performance(self, iterations=10):
+        """
+        Establish a baseline performance based on random behaviour
+        :param iterations:
+        :return:
+        """
         random_policy = random_tf_policy.RandomTFPolicy(self._eval_env.time_step_spec(),
                                                         self._eval_env.action_spec())
 
         return compute_avg_return(self._eval_env, random_policy, iterations)
 
-    def execute_random_policy(self, steps, replay_buffer_max_length=10):
-        random_policy = random_tf_policy.RandomTFPolicy(self._eval_env.time_step_spec(),
-                                                        self._eval_env.action_spec())
+    def run_agent(self, video_filename=None, num_episodes=50, fps=2, random=False):
+        """
+        Run iterations.
+        :param video_filename:
+        If specified, create a video of the iterations in the filename
+        :param num_episodes:
+        Number of episodes to run
+        :param fps:
+        Frames per second for video
+        :param policy:
+        For random behaviour, set policy as follows
+        :return:
+        """
+        filename = video_filename + ".mp4"
 
-        '''
-        collect_data_spec returns a trajectory spec
-        A trajectory spec is a tuple that contains:
-        - the state of the environment in some time step (observation)
-        - the action that the agent should take in that state (action)
-        - the state in which the environment will be after the action is taken
-        '''
-        replay_buffer = tf_uniform_replay_buffer.TFUniformReplayBuffer(
-            data_spec=self._training_agent.collect_data_spec,
-            batch_size=self._train_env.batch_size,
-            max_length=replay_buffer_max_length)
+        if not random:
+            policy = self._neural_network_agent.policy
+        else:
+            policy = random_tf_policy.RandomTFPolicy(self._eval_env.time_step_spec(),
+                                                     self._eval_env.action_spec())
 
-        collect_data(self._train_env, random_policy, replay_buffer, steps=steps)
-
-        '''
-        The agent requires access to the replay buffer.
-        
-        '''
-        buffer_it = iter(replay_buffer.as_dataset())
-        for i in buffer_it:
-            print(i)
+        if video_filename is not None:
+            with imageio.get_writer(filename, fps=fps) as video:
+                for episode in range(num_episodes):
+                    print('Episode: ', episode)
+                    # Reset the evaluation environment
+                    time_step = self._eval_env.reset()
+                    while not time_step.is_last():
+                        action_step = policy.action(time_step)
+                        time_step = self._eval_env.step(action_step.action)
+                        tf.print(action_step.action, time_step)
+                        video.append_data(self._eval_py_env.render())
+        else:
+            for episode in range(num_episodes):
+                print('Episode: ', episode)
+                # Reset the evaluation environment
+                time_step = self._eval_env.reset()
+                while not time_step.is_last():
+                    action_step = policy.action(time_step)
+                    time_step = self._eval_env.step(action_step.action)
+                    tf.print(action_step.action, time_step)
 
 
 def main():
-    blobble_agent = BlobbleAgent('CartPole-v0')
+    # blobble_agent = BlobbleAgent('CartPole-v0')
+    blobble_agent = QNetworkAgent('blobble-world-v0')
 
-    print('Baseline Performance is: ', blobble_agent.get_baseline_performance())
+    # print('Baseline Performance is: ', blobble_agent.get_baseline_performance())
 
-    blobble_agent.execute_random_policy(5)
-
-
-
-    '''
-    time_step = env.reset()
-    # Image.fromarray(env.render(mode='rgb_array')).show()
-
-    print('Time step:')
-    print(time_step)
-    action = np.array(2, dtype=np.int32)
-    next_time_step = env.step(action)
-    print('Next time step:')
-    print(next_time_step)
-    action = np.array(1, dtype=np.int32)
-    next_time_step = env.step(action)
-    print('Next time step:')
-    print(next_time_step)
-    env.render()
-    # create_blobble_video('blobble_random', num_episodes=0, fps=30)
-
-
-    '''
-
-    '''
-    Let's test the baseline performance of the environment
-  
-    random_policy = random_tf_policy.RandomTFPolicy(train_env.time_step_spec(),
-                                                    train_env.action_spec())
-    #example_environment = tf_py_environment.TFPyEnvironment(
-    #    suite_gym.load('env_name'))
-    #time_step = example_environment.reset()
- #   random_policy.action(time_step)
-#
-
-    # compute_avg_return(eval_env, random_policy, 10)
-
-    replay_buffer_max_length = 100000
-    replay_buffer = tf_uniform_replay_buffer.TFUniformReplayBuffer(
-        data_spec=agent.collect_data_spec,
-        batch_size=train_env.batch_size,
-        max_length=replay_buffer_max_length)
-
-    #agent.collect_data_spec
-    #agent.collect_data_spec._fields
-  '''
+    blobble_agent.run_agent('clever_blobble', num_episodes=10)
 
 
 if __name__ == "__main__":

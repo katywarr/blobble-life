@@ -15,10 +15,11 @@ class BlobbleEnv(gym.Env):
 
     Observation:
         Type: Box(3)
-        Num     Observation                         Min             Max
-        0       Blobble X location                  MIN_LOC(-10)    MAX_LOC (10)
-        1       Blobble Y location                  MIN_LOC(-10)    MAX_LOC (10)
-        2       Food nutritional value at location  -5              +5     (set to zero if no food)
+        Num     Observation                             Min             Max
+        0       Blobble X location                      MIN_LOC(-10)    MAX_LOC (10)
+        1       Blobble Y location                      MIN_LOC(-10)    MAX_LOC (10)
+        2       Health                                  0               MAX_HEALTH (10)
+        3       Taste (Food nutritional value at loc)   -5              +5     (set to zero if no food)
 
     Action
         Type: Discrete(10)
@@ -43,16 +44,23 @@ class BlobbleEnv(gym.Env):
 
         self.action_space = spaces.Discrete(9)
 
+        self._MAX_HEALTH = 10
         self._MAX_LOC = 10
         self._MIN_LOC = -self._MAX_LOC
         high_values = np.array([self._MAX_LOC,
                                 self._MAX_LOC,
+                                self._MAX_HEALTH,
                                 5],
                         dtype=np.float32)
-        self.observation_space = spaces.Box(-high_values, high_values, dtype=np.float32)
+        low_values = np.array([-self._MAX_LOC,
+                               -self._MAX_LOC,
+                               0,
+                               -5],
+                        dtype=np.float32)
+        self.observation_space = spaces.Box(low_values, high_values, dtype=np.float32)
 
         # Initialise aspects of the envs that never change
-        self._MAX_HEALTH = 10
+
         max_bubble_size = 50
         self._SIZE_REF = 2. * self._MAX_HEALTH / (max_bubble_size ** 2)  # For scaling blobbles and food
 
@@ -71,13 +79,21 @@ class BlobbleEnv(gym.Env):
         self.reset()
         self._best_episode = 0
 
-    def reset(self, initial_state=([0, 0, 5]), test_food_at_location=None):
+    def reset(self, initial_state=None, test_food_at_location=None):
+        """
+        Resets the Blobble to its initial state
 
+        :param initial_state:
+        Initial state array [x, y, health]. If not specified, it will default.
+        :param test_food_at_location:
+        For test purposes only - forces food to be placed at the initial location
+        :return:
+        observation
+        """
+
+        if initial_state is None:
+            initial_state = ([0, 0, 5])
         self._episode += 1
-
-        # Create New Blobble
-        self._blobble_state = np.array(initial_state)
-        self._rewards_so_far = 0
 
         if test_food_at_location is not None:  # Simply a way of forcing food at current loc for testing purposes
             self._food = np.zeros((self._MAX_LOC-self._MIN_LOC+1, self._MAX_LOC-self._MIN_LOC+1))
@@ -89,25 +105,63 @@ class BlobbleEnv(gym.Env):
                                                 high=5,
                                                 size=(self._MAX_LOC-self._MIN_LOC+1, self._MAX_LOC-self._MIN_LOC+1))
 
+        self._hunger = 0
+
+        # Create New Blobble
+        self._blobble_state = np.array(initial_state)
+        local_nutrition = self._food[self._blobble_state[0] - self._MIN_LOC][self._blobble_state[1] - self._MIN_LOC]
+        self._blobble_state = np.append(self._blobble_state, local_nutrition)
+
+        self._rewards_so_far = 0
+
+        return self._blobble_state
+
     def seed(self, seed=None):
+        """
+        Provided to enable deterministic behaviour
+
+        :param seed:
+        :return:
+        seed
+        """
         self.np_random, seed = seeding.np_random(seed)
         return seed
 
     def _eat(self):
+        """
+        Internal (private) method called when the blobble eats
+        :return:
+        """
+
         # Eat any food at the current location
-        nutrition = self._food[self._blobble_state[0] - self._MIN_LOC][self._blobble_state[1] - self._MIN_LOC]
+        nutrition = self._blobble_state[3]
         if nutrition != 0:
-            print('yum')
-        # Add health but clipy it between 0 and max_health
+            # print('yum')
+            self._hunger = 0
+        else:
+            self._hunger += 1
+        # Add health but clip it between 0 and max_health
         self._blobble_state[2] = max(0, min(self._blobble_state[2] + nutrition, self._MAX_HEALTH))
         # Delete the food
         self._food[self._blobble_state[0] - self._MIN_LOC][self._blobble_state[1] - self._MIN_LOC] = 0
 
+        return
 
     def step(self, action):
+        """
+        Perform an action
+
+        :param action:
+        Action to be performed
+        :return:
+        observation, reward, done, {}
+        """
 
         if action < 5:  # Eat (if there is food)
             self._eat()
+        else:
+            self._hunger += 1
+
         if (action == 1) or (action == 5):  # Move East
             self._blobble_state[0] = min(self._blobble_state[0] + 1, self._MAX_LOC)
         if (action == 2) or (action == 6):  # Move South
@@ -116,6 +170,9 @@ class BlobbleEnv(gym.Env):
             self._blobble_state[0] = max(self._blobble_state[0] - 1, self._MIN_LOC)
         if (action == 4) or (action == 8):  # Move North
             self._blobble_state[1] = min(self._blobble_state[1] + 1, self._MAX_LOC)
+
+        # Set the nutritional value as part of the blobble state
+        self._blobble_state[3] = self._food[self._blobble_state[0] - self._MIN_LOC][self._blobble_state[1] - self._MIN_LOC]
 
         # Set game as done if the health of the blobble has gone to zero
         done = bool(self._blobble_state[2] <= 0)
@@ -128,11 +185,21 @@ class BlobbleEnv(gym.Env):
                 reward = 1.0
             self._rewards_so_far = self._rewards_so_far + reward
         else:
-            self._best_episode=max(self._rewards_so_far, self._best_episode)
+            self._best_episode = max(self._rewards_so_far, self._best_episode)
+
+        if self._hunger > 5:
+            self._blobble_state[2] = max(0, self._blobble_state[2] - 1)
 
         return self._blobble_state, reward, done, {}
 
-    def render(self, mode='human', close=False):
+    def render(self, mode='rgb_array', close=False):
+        """
+        Renders the blobble world in a human readable format or in an RGB array.
+
+        :param mode: 'human' or 'rgb_array'
+        :param close:
+        :return:
+        """
 
         # Create the x and y location lists for rendering the food positions
         super_food = np.argwhere(self._food > 3).T + self._MIN_LOC
@@ -230,11 +297,20 @@ class BlobbleEnv(gym.Env):
             return np_img
 
     def close(self):
+        """
+
+        :return:
+        """
         print('Closing Blobble World')
 
     def render_print(self):
+        """
+        For testing
+        :return:
+        """
         print('Blobble details are:')
         print('  Health: ', self._blobble_state[2])
         print('  Position x : ', self._blobble_state[0])
-        print('  Position y : ', self._blobble_state[1])
+        print('  Local nutrition : ', self._blobble_state[3])
         print('  Remaining food :', len(self._food[0]))
+        print('  Blobble hunger: ', self._hunger)
