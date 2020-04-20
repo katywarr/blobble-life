@@ -82,6 +82,10 @@ Here's average return during learning when the blobble has taste and smell:
 
 ![BlobbleLearning Taste and Smell](images/BlobbleLearning_taste_smell.png)
 
+The video of the resulting blobble agent running over 10 episodes (trimmed to reduce size):
+
+![BlobbleVideo Taste and Smell](images/BlobbleVideo_taste_smell.gif)
+
 Running this agent over 10 episodes, the maximum score it 
 gets is 134.5. 
 
@@ -99,6 +103,10 @@ Here's the average return for the blobble learning with taste only:
 
 Running this agent without the smell, maximum 
 score drops to 90. As you would expect, the blobble moves randomly but has learned to only eat good food.
+
+The video of the resulting blobble agent running over 10 episodes (trimmed to the last few to make it smaller):
+
+![BlobbleVideo Taste Only](images/BlobbleVideo_taste_only.gif)
 
 ### Smelling only Blobble
 
