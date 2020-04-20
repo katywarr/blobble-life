@@ -98,7 +98,7 @@ class BlobbleEnv(gym.Env):
         self._episode = 0
 
         self.seed()
-        # Reset the world to its start position
+        # Reset the env to its start position
         self.reset()
         self._best_episode = 0
 
@@ -182,13 +182,13 @@ class BlobbleEnv(gym.Env):
         smell_strength_fraction = 1
 
         for i in range(1, 5):
-            if y+i < (self._MAX_LOC-self._MIN_LOC + 1):  # Check not at edge of blobble world
+            if y+i < (self._MAX_LOC-self._MIN_LOC + 1):  # Check not at edge of blobble env
                 smell_east = smell_east + (self._food[x, y+i]/smell_strength_fraction)
-            if y-i >= 0:                                  # Check not at edge of blobble world
+            if y-i >= 0:                                  # Check not at edge of blobble env
                 smell_west = smell_west + (self._food[x, y-i]/smell_strength_fraction)
-            if x+i < (self._MAX_LOC-self._MIN_LOC + 1):  # Check not at edge of blobble world
+            if x+i < (self._MAX_LOC-self._MIN_LOC + 1):  # Check not at edge of blobble env
                 smell_north = smell_north + (self._food[x+i, y]/smell_strength_fraction)
-            if x-i >= 0:                                  # Check not at edge of blobble world
+            if x-i >= 0:                                  # Check not at edge of blobble env
                 smell_south = smell_south + (self._food[x-i, y]/smell_strength_fraction)
 
             smell_strength_fraction = smell_strength_fraction * 2  # Increase fraction - food further away smells less
@@ -250,7 +250,7 @@ class BlobbleEnv(gym.Env):
 
     def render(self, mode='rgb_array', close=False):
         """
-        Renders the blobble world in a human readable format or in an RGB array.
+        Renders the blobble env in a human readable format or in an RGB array.
 
         :param mode: 'human' or 'rgb_array'
         :param close:
@@ -372,7 +372,7 @@ class BlobbleEnv(gym.Env):
 
         :return:
         """
-        print('Closing Blobble World')
+        print('Closing Blobble Environment')
 
     def render_print(self):
         """

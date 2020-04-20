@@ -1,4 +1,4 @@
-name: blobble-world
+name: blobble-life
 channels:
   - plotly
   - defaults

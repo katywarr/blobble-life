@@ -289,7 +289,7 @@ class QNetworkAgent():
 
 def main():
     # agent = QNetworkAgent('CartPole-v0')
-    agent = QNetworkAgent('blobble-world-v0')
+    agent = QNetworkAgent('blobble-life-v0')
 
     agent.run_agent('BlobbleVideo_taste_smell', num_episodes=10)
 
