@@ -1,11 +1,11 @@
-# blobble-world
+# blobble-life
 
-Blobble World is an AI environment for experimenting with reinforcement 
+Blobble Life is an AI environment for experimenting with reinforcement 
 learning.
 
 It's silly and created purely for fun.
 
-![Blobble World Image](images/Blobble_Image.png)
+![Blobble Life Image](images/Blobble_Image.png)
 
 The blobble (in purple) can move around its world by taking one step on each turn (north, south, east, west). Before
 it moves, it can eat the food at its current location (if it deems it tasty).
@@ -133,8 +133,8 @@ From within an Anaconda command prompt, navigate to this cloned repository to cr
 a virtual environment.
 
 ```
-conda env create -f blobble-world-gpu.yml
-conda activate blobble-world
+conda env create -f blobble-life-gpu.yml
+conda activate blobble-life
 ```
 
 For non-gpu execution, reinstall tensorflow:
@@ -155,7 +155,7 @@ Then, within python (or notebook):
 
 ```
 import gym
-gym.make('gym_blobble:blobble-world-v0')
+gym.make('gym_blobble:blobble-life-v0')
 ```
 
 See details [here](https://github.com/openai/gym/blob/master/docs/creating-environments.md).
