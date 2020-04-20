@@ -79,7 +79,7 @@ def train_neural_network(agent,
 
     print('Train the Network')
     replay_buffer_max_length = 100000
-    num_iterations = 1000
+    num_iterations = 10000
 
     # (Optional) Optimize by wrapping some of the code in a graph using TF function.
     agent.train = common.function(agent.train)
@@ -144,7 +144,7 @@ def train_neural_network(agent,
     plt.ylabel('Average Return')
     plt.xlabel('Iterations')
     # plt.ylim(top=250)
-    plt.ion()  # Turn on interactive mode so the following line is non-blocking
+    # plt.ion()  # Turn on interactive mode so the following line is non-blocking
     plt.show()
 
 
@@ -236,10 +236,10 @@ class QNetworkAgent():
         :param iterations:
         :return:
         """
-        random_policy = random_tf_policy.RandomTFPolicy(self._eval_env.time_step_spec(),
-                                                        self._eval_env.action_spec())
+        random_policy = random_tf_policy.RandomTFPolicy(self._train_env.time_step_spec(),
+                                                        self._train_env.action_spec())
 
-        return compute_avg_return(self._eval_env, random_policy, iterations)
+        return compute_avg_return(self._train_env, random_policy, iterations)
 
     def run_agent(self, video_filename=None, num_episodes=50, fps=2, random=False):
         """
@@ -254,43 +254,44 @@ class QNetworkAgent():
         For random behaviour, set policy as follows
         :return:
         """
+        run_py_env = suite_gym.load(self._env_name)
+        run_env = tf_py_environment.TFPyEnvironment(run_py_env)
+
         filename = video_filename + ".mp4"
 
         if not random:
             policy = self._neural_network_agent.policy
         else:
-            policy = random_tf_policy.RandomTFPolicy(self._eval_env.time_step_spec(),
-                                                     self._eval_env.action_spec())
+            policy = random_tf_policy.RandomTFPolicy(run_env.time_step_spec(),
+                                                     run_env.action_spec())
 
         if video_filename is not None:
             with imageio.get_writer(filename, fps=fps) as video:
                 for episode in range(num_episodes):
                     print('Episode: ', episode)
                     # Reset the evaluation environment
-                    time_step = self._eval_env.reset()
+                    time_step = run_env.reset()
                     while not time_step.is_last():
                         action_step = policy.action(time_step)
-                        time_step = self._eval_env.step(action_step.action)
+                        time_step = run_env.step(action_step.action)
                         tf.print(action_step.action, time_step)
-                        video.append_data(self._eval_py_env.render())
+                        video.append_data(run_py_env.render())
         else:
             for episode in range(num_episodes):
                 print('Episode: ', episode)
                 # Reset the evaluation environment
-                time_step = self._eval_env.reset()
+                time_step = run_env.reset()
                 while not time_step.is_last():
                     action_step = policy.action(time_step)
-                    time_step = self._eval_env.step(action_step.action)
+                    time_step = run_env.step(action_step.action)
                     tf.print(action_step.action, time_step)
 
 
 def main():
-    # blobble_agent = BlobbleAgent('CartPole-v0')
-    blobble_agent = QNetworkAgent('blobble-world-v0')
+    # agent = QNetworkAgent('CartPole-v0')
+    agent = QNetworkAgent('blobble-world-v0')
 
-    # print('Baseline Performance is: ', blobble_agent.get_baseline_performance())
-
-    blobble_agent.run_agent('clever_blobble', num_episodes=10)
+    agent.run_agent('BlobbleVideo_taste_smell', num_episodes=10)
 
 
 if __name__ == "__main__":

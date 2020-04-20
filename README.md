@@ -5,7 +5,7 @@ learning.
 
 It's silly and created purely for fun.
 
-![Blobble World Image](Blobble_Image.png)
+![Blobble World Image](images/Blobble_Image.png)
 
 The blobble (in purple) can move around its world by taking one step on each turn (north, south, east, west). Before
 it moves, it can eat the food at its current location (if it deems it tasty).
@@ -19,6 +19,11 @@ The blobble can learn how to stay healthy and therefore survive longer. It can h
 eat the good stuff and leave the bad stuff.
 
 * smelling blobble - able to 'smell' food in each direction. A smelling blobble should learn to move towards good food.
+The blobble can smell food up to 5 steps away, but food closer smells stronger. The blobble cannot 
+smell the food it's on top of. 
+In the current implementation,
+blobble just smells all food on a single range of food smelliness - where food with little nutrition 
+is negative on the scale. Future implementations might have different types of smell.
 
 ## AI Gym Environment
 
@@ -63,6 +68,51 @@ eat the good stuff and leave the bad stuff.
         - extra 0.5 for being over average health (encourage healthy eating)
 ```
 
+## Learning Results
+The following experiments used a QNetwork agent with:
+
+```
+shape = (75,40)
+learning rate = 1e-3
+learming iterations = 10,000
+```
+
+### Tasting and Smelling Blobble 
+Here's average return during learning when the blobble has taste and smell:
+
+![BlobbleLearning Taste and Smell](images/BlobbleLearning_taste_smell.png)
+
+Running this agent over 10 episodes, the maximum score it 
+gets is 134.5. 
+
+The blobble occasionally misses eating good food - it may be that it requires longer learning to cater for the 
+more complex observations.
+
+The blobble sometimes gets in a 'rut' and repeats its behaviour leading to its 
+demise. Perhaps next step is to have an exploratory aspect to the 
+blobble to add some occasional randomness.
+
+### Tasting only Blobble
+Here's the average return for the blobble learning with taste only:
+
+![BlobbleLearning Taste Only](images/BlobbleLearning_taste_only.png)
+
+Running this agent without the smell, maximum 
+score drops to 90. As you would expect, the blobble moves randomly but has learned to only eat good food.
+
+### Smelling only Blobble
+
+Is it better for the blobble to smell or taste? Here's what happens when the blobble can only smell.
+
+![BlobbleLearning Taste Only](images/BlobbleLearning_smell_only.png)
+
+Essentially, the blobble agent fails to learn and performs randomly. 
+
+### Random Blobble
+
+And, for completemess, when the blobble returns no smell or taste information, obviously the result is random. 
+
+![BlobbleLearning Taste Only](images/BlobbleLearning_no_smell_or_taste.png)
 
 
 ## Running the Code
