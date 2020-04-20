@@ -104,15 +104,19 @@ score drops to 90. As you would expect, the blobble moves randomly but has learn
 
 Is it better for the blobble to smell or taste? Here's what happens when the blobble can only smell.
 
-![BlobbleLearning Taste Only](images/BlobbleLearning_smell_only.png)
+![BlobbleLearning Smell Only](images/BlobbleLearning_smell_only.png)
 
 Essentially, the blobble agent fails to learn and performs randomly. 
+
+The video of the resulting blobble agent running over 10 episodes:
+
+![BlobbleVideo](images/BlobbleVideo_smell_only.gif)
 
 ### Random Blobble
 
 And, for completemess, when the blobble returns no smell or taste information, obviously the result is random. 
 
-![BlobbleLearning Taste Only](images/BlobbleLearning_no_smell_or_taste.png)
+![BlobbleLearning No Smell or Taste](images/BlobbleLearning_no_smell_or_taste.png)
 
 
 ## Running the Code
