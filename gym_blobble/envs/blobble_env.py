@@ -96,7 +96,7 @@ class BlobbleEnv(gym.Env):
         self._episode += 1
 
         if test_food_at_location is not None:  # Simply a way of forcing food at current loc for testing purposes
-            self._food = np.zeros((self._MAX_LOC-self._MIN_LOC+1, self._MAX_LOC-self._MIN_LOC+1))
+            self._food = np.zeros((self._MAX_LOC-self._MIN_LOC+1, self._MAX_LOC-self._MIN_LOC+1), dtype=int)
             self._food[initial_state[0] - self._MIN_LOC][initial_state[1]-self._MIN_LOC]=test_food_at_location
 
         else:  # This is the proper code path
@@ -259,6 +259,21 @@ class BlobbleEnv(gym.Env):
         fig.add_trace(go.Scatter(
             x=[self._blobble_state[0]],
             y=[self._blobble_state[1]],
+            showlegend=False,
+            mode='markers',
+            marker=dict(
+                sizeref=self._SIZE_REF,
+                size=self._blobble_state[2]*5,
+                symbol='asterisk-open',
+                color='gray',
+                line=dict(width=2, color='gray')
+                )
+            )
+        )
+
+        fig.add_trace(go.Scatter(
+            x=[self._blobble_state[0]],
+            y=[self._blobble_state[1]],
             text='Blobble',
             showlegend=False,
             mode='markers',
@@ -267,7 +282,7 @@ class BlobbleEnv(gym.Env):
                 size=self._blobble_state[2]*4,
                 color=self._HEALTH_COLOURS[
                     int(self._blobble_state[2] / self._MAX_HEALTH * (len(self._HEALTH_COLOURS) - 1))],
-                line=dict(width=1, color='white')
+                line=dict(width=2, color='gray')
                 )
             )
         )

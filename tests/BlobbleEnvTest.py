@@ -105,8 +105,8 @@ class TestBlobbleEnv(unittest.TestCase):
 
     def test_render_human(self):
         blobble_env = BlobbleEnv()
-        blobble_env.reset(initial_state=[0, 0, 5])
-        blobble_env.render()
+        blobble_env.reset(initial_state=[2, -2, 7])
+        blobble_env.render(mode='human')
 
     def test_render_rgb(self):
         blobble_env = BlobbleEnv()
