@@ -72,14 +72,15 @@ def compute_avg_return(environment, policy, num_episodes=10):
 def train_neural_network(agent,
                          train_env,
                          eval_env,
+                         num_train_iterations=10000,
                          num_eval_episodes=10,
                          log_interval=200,
                          eval_interval=1000,
-                         collect_steps_per_iteration=1):
-
+                         replay_buffer_max_length=100000,
+                         collect_steps_per_iteration=2):
     print('Train the Network')
-    replay_buffer_max_length = 100000
-    num_iterations = 10000
+    replay_buffer_max_length = replay_buffer_max_length
+    num_iterations = num_train_iterations
 
     # (Optional) Optimize by wrapping some of the code in a graph using TF function.
     agent.train = common.function(agent.train)
@@ -122,7 +123,7 @@ def train_neural_network(agent,
     for i in range(num_iterations):
 
         # Collect a few steps using collect_policy and save to the replay buffer.
-        collect_steps_per_iteration = 2
+        collect_steps_per_iteration = collect_steps_per_iteration
         for _ in range(collect_steps_per_iteration):
             collect_step(train_env, agent.collect_policy, replay_buffer)
 
@@ -184,7 +185,15 @@ class QNetworkAgent():
     Wrapper class to provide a Deep Neural Network agent for any provided tf-agent environment.
     """
 
-    def __init__(self, env_name='blobble-world-v0'):
+    def __init__(self,
+                 env_name='blobble-world-v0',
+                 num_iterations=10000,
+                 num_eval_episodes=10,
+                 log_interval=200,
+                 eval_interval=1000,
+                 replay_buffer_max_length=100000,
+                 collect_steps_per_iteration=2
+                 ):
         """
         Initalise the agent by training a neural network for the passed tf-agent environment
 
@@ -224,11 +233,10 @@ class QNetworkAgent():
         train_neural_network(self._neural_network_agent,
                              self._train_env,
                              self._eval_env,
-                             num_eval_episodes=10,
-                             log_interval=200,
-                             eval_interval=1000,
-                             collect_steps_per_iteration=1)
-
+                             num_eval_episodes=num_eval_episodes,
+                             log_interval=log_interval,
+                             eval_interval=eval_interval,
+                             collect_steps_per_iteration=collect_steps_per_iteration)
 
     def get_random_baseline_performance(self, iterations=10):
         """
@@ -288,10 +296,10 @@ class QNetworkAgent():
 
 
 def main():
-    # agent = QNetworkAgent('CartPole-v0')
+
     agent = QNetworkAgent('blobble-life-v0')
 
-    agent.run_agent('BlobbleVideo_taste_smell', num_episodes=10)
+    agent.run_agent('BlobbleVideo_smell_new1', num_episodes=3)
 
 
 if __name__ == "__main__":

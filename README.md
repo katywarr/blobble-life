@@ -1,5 +1,8 @@
 # blobble-life
 
+**New for 2021 - Blobbles have better noses!**
+(note that the description below hasn't yet been updated for better smelling capability)
+
 Blobble Life is an AI environment for experimenting with reinforcement 
 learning.
 
@@ -159,6 +162,21 @@ gym.make('gym_blobble:blobble-life-v0')
 ```
 
 See details [here](https://github.com/openai/gym/blob/master/docs/creating-environments.md).
+
+To run the code:
+
+```
+   agent = QNetworkAgent('blobble-life-v0')
+   agent.run_agent(...)
+```
+
+```run_agent``` takes several parameters. Take a look in ```LearningBlobble.py``` for an example of the code above.
+
+The training step can be changed by updating the ```train_neural_network``` function's default parameters in the 
+same file. (To do: I will update to make this easier - using a configuration file).
+
+
+ 
 
 
 

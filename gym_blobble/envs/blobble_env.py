@@ -3,6 +3,7 @@ from PIL import Image
 import gym
 import numpy as np
 import plotly.graph_objects as go
+from copy import deepcopy
 
 from gym import spaces, error, utils
 from gym.utils import seeding
@@ -17,14 +18,15 @@ class BlobbleEnv(gym.Env):
 
         Type: Box(3)
         Num     Observation                             Min             Max
-        0       Blobble X location                      MIN_LOC(-10)    MAX_LOC (10)
-        1       Blobble Y location                      MIN_LOC(-10)    MAX_LOC (10)
+        0       Blobble Northerly Location              MIN_LOC(-10)    MAX_LOC (10)
+        1       Blobble Easterly location               MIN_LOC(-10)    MAX_LOC (10)
         2       Health                                  0               MAX_HEALTH (10)
         3       Taste (Food nutritional value at loc)   -5              +5     (set to zero if no food)
-        4       Food smell north                        -10             +10
-        5       Food smell south                        -10             +10
-        6       Food smell east                         -10             +10
-        7       Food smell west                         -10             +10
+        The smell is the average of the four closest locations in the relevant direction
+        4       Food smell N                            -5              +5
+        5       Food smell S                            -5              +5
+        6       Food smell E                            -5              +5
+        7       Food smell W                            -5              +5
 
 
     Actions:
@@ -32,14 +34,14 @@ class BlobbleEnv(gym.Env):
         Type: Discrete(10)
         Num     Action
         0       eat
-        1       eat, move E
-        2       eat, move S
-        3       eat, move W
-        4       eat, move N
-        5       move E
-        6       move S
-        7       move W
-        8       move N
+        1       move N
+        2       move S
+        3       move E
+        4       move W
+        5       eat, move N
+        6       eat, move S
+        7       eat, move E
+        8       eat, move W
 
     An Episode Ends When:
 
@@ -59,6 +61,9 @@ class BlobbleEnv(gym.Env):
 
         self.action_space = spaces.Discrete(9)
 
+        self._SMELL = True
+        self._TASTE = False
+
         self._MAX_HEALTH = 10
         self._MAX_LOC = 10
         self._MIN_LOC = -self._MAX_LOC
@@ -70,7 +75,7 @@ class BlobbleEnv(gym.Env):
                                 5,
                                 5,
                                 5],
-                        dtype=np.float32)
+                               dtype=np.float32)
         low_values = np.array([-self._MAX_LOC,
                                -self._MAX_LOC,
                                0,
@@ -79,11 +84,10 @@ class BlobbleEnv(gym.Env):
                                -5,
                                -5,
                                -5],
-                        dtype=np.float32)
+                              dtype=np.float32)
         self.observation_space = spaces.Box(low_values, high_values, dtype=np.float32)
 
         # Initialise aspects of the envs that never change
-
         max_bubble_size = 50
         self._SIZE_REF = 2. * self._MAX_HEALTH / (max_bubble_size ** 2)  # For scaling blobbles and food
 
@@ -97,48 +101,37 @@ class BlobbleEnv(gym.Env):
                                 'rgb(99, 85, 159)']
         self._episode = 0
 
+        # Create New Blobble
+        # This is the starting state for the blobble every reset [northerly, easterly, health]
+        self._initial_state = (0, 0, 5)
+        # Allocate the Blobble State array - this is returned as the observation following each step
+        self._blobble_state = np.zeros(8, dtype=np.float)
+
         self.seed()
         # Reset the env to its start position
         self.reset()
         self._best_episode = 0
 
-    def reset(self, initial_state=None, test_food_at_location=None):
+    def reset(self):
         """
         Resets the Blobble to its initial state
 
-        :param initial_state:
-        Initial state array [x, y, health]. If not specified, it will default.
-        :param test_food_at_location:
-        For test purposes only - forces food to be placed at the initial location
         :return:
         observation
         """
 
-        if initial_state is None:
-            initial_state = ([0, 0, 5])
-        self._episode += 1
+        self._blobble_state[0:3] = self._initial_state
+        self._blobble_state[3:8] = np.array((0., 0., 0., 0., 0.), dtype=float)
 
-        if test_food_at_location is not None:  # Simply a way of forcing food at current loc for testing purposes
-            self._food = np.zeros((self._MAX_LOC-self._MIN_LOC+1, self._MAX_LOC-self._MIN_LOC+1), dtype=int)
-            self._food[initial_state[0] - self._MIN_LOC][initial_state[1]-self._MIN_LOC]=test_food_at_location
-
-        else:  # This is the proper code path
-            # Reset Blobble food locations
-            self._food = self.np_random.randint(low=-5,
-                                                high=5,
-                                                size=(self._MAX_LOC-self._MIN_LOC+1, self._MAX_LOC-self._MIN_LOC+1))
-
+        # Reset Blobble food locations
+        self._food = self.np_random.randint(low=-5,
+                                            high=5,
+                                            size=(self._MAX_LOC - self._MIN_LOC + 1, self._MAX_LOC - self._MIN_LOC + 1))
         self._hunger = 0
-
-        # Create New Blobble
-        self._blobble_state = np.array(initial_state)
-        local_nutrition = self._food[self._blobble_state[0] - self._MIN_LOC][self._blobble_state[1] - self._MIN_LOC]
-        self._blobble_state = np.append(self._blobble_state, [0, 0, 0, 0, 0])
-
         self._rewards_so_far = 0
 
-        self._taste()
-        self._smell()
+        taste = self._taste()
+        smell = self._smell()
 
         return self._blobble_state
 
@@ -169,39 +162,95 @@ class BlobbleEnv(gym.Env):
         # Add health but clip it between 0 and max_health
         self._blobble_state[2] = max(0, min(self._blobble_state[2] + nutrition, self._MAX_HEALTH))
         # Delete the food
-        self._food[self._blobble_state[0] - self._MIN_LOC][self._blobble_state[1] - self._MIN_LOC] = 0
+        row, column = self._position_in_food_array(self._blobble_state[0], self._blobble_state[1])
+        self._food[row, column] = 0
 
         return
 
+    def _position_in_food_array(self, northerly, easterly):
+        # The row in self._food corresponding to the blobble's northerly position
+        food_array_row = -(int(northerly) + self._MIN_LOC)
+        # The column in self._food corresponding to the blobble's easterly location
+        food_array_column = int(easterly) - self._MIN_LOC
+        return food_array_row, food_array_column
+
+    def _clip(self, value, minimum_value, maximum_value):
+        return min(maximum_value, max(minimum_value, value))
+
+    def _sniff(self, sniff_row, sniff_column):
+
+        # If we are at the edge of the land, nothing to smell
+        if (sniff_row < 0) or (sniff_column < 0):
+            return 0
+        if (sniff_row > self._MAX_LOC-self._MIN_LOC) or (sniff_column > self._MAX_LOC-self._MIN_LOC):
+            return 0
+        # Else return the food's value
+        return self._food[sniff_row, sniff_column]
+
     def _smell(self):
 
-        x = self._blobble_state[0] - self._MIN_LOC
-        y = self._blobble_state[1] - self._MIN_LOC
-        smell_east, smell_north, smell_south, smell_west = [0, 0, 0, 0]
+        if self._SMELL is False:
+            return np.zeros(4, dtype=np.float)  # Non-smelling blobble
 
-        smell_strength_fraction = 1
+        food_array_row, food_array_column = self._position_in_food_array(self._blobble_state[0],
+                                                                         self._blobble_state[1])
 
-        for i in range(1, 5):
-            if y+i < (self._MAX_LOC-self._MIN_LOC + 1):  # Check not at edge of blobble env
-                smell_east = smell_east + (self._food[x, y+i]/smell_strength_fraction)
-            if y-i >= 0:                                  # Check not at edge of blobble env
-                smell_west = smell_west + (self._food[x, y-i]/smell_strength_fraction)
-            if x+i < (self._MAX_LOC-self._MIN_LOC + 1):  # Check not at edge of blobble env
-                smell_north = smell_north + (self._food[x+i, y]/smell_strength_fraction)
-            if x-i >= 0:                                  # Check not at edge of blobble env
-                smell_south = smell_south + (self._food[x-i, y]/smell_strength_fraction)
+        # Take a sniff north, south, east and west
 
-            smell_strength_fraction = smell_strength_fraction * 2  # Increase fraction - food further away smells less
+        # Sniff North
+        # [ ., ., o, ., .],
+        # [ ., o, o, o, .],
+        # [ ., ., B, ., .]
+        smell_north = self._blobble_state[4] = np.average(np.array([self._sniff(food_array_row - 2, food_array_column),
+                                                          self._sniff(food_array_row - 1, food_array_column - 1),
+                                                          self._sniff(food_array_row - 1, food_array_column),
+                                                          self._sniff(food_array_row - 1, food_array_column + 1)]
+                                                                   ))
 
-        self._blobble_state[4] = smell_north
-        self._blobble_state[5] = smell_south
-        self._blobble_state[6] = smell_east
-        self._blobble_state[7] = smell_west
+        # Sniff South
+        # [ ., ., B, ., .],
+        # [ ., o, o, o, .],
+        # [ ., ., o, ., .]
+        smell_south = self._blobble_state[5] = np.average(np.array([self._sniff(food_array_row + 2, food_array_column),
+                                                          self._sniff(food_array_row + 1, food_array_column - 1),
+                                                          self._sniff(food_array_row + 1, food_array_column),
+                                                          self._sniff(food_array_row + 1, food_array_column + 1)]
+                                                                   ))
+        # Sniff East
+        # [ ., ., ., o, .],
+        # [ ., ., B, o, o],
+        # [ ., ., ., o, .]
+        smell_east = self._blobble_state[6] = np.average(np.array([self._sniff(food_array_row, food_array_column + 2),
+                                                         self._sniff(food_array_row - 1, food_array_column + 1),
+                                                         self._sniff(food_array_row, food_array_column + 1),
+                                                         self._sniff(food_array_row + 1, food_array_column + 1)]
+                                                                  ))
+        # Sniff West
+        # [ ., o, ., ., .],
+        # [ o, o, B, ., .],
+        # [ ., o, ., ., .]
+        smell_west = self._blobble_state[7] = np.average(np.array([self._sniff(food_array_row, food_array_column - 2),
+                                                         self._sniff(food_array_row - 1, food_array_column - 1),
+                                                         self._sniff(food_array_row, food_array_column - 1),
+                                                         self._sniff(food_array_row + 1, food_array_column - 1)]
+                                                                  ))
 
+        smell = np.array((smell_north,
+                          smell_south,
+                          smell_east,
+                          smell_west),
+                         dtype=np.float32)
+
+        return smell
 
     def _taste(self):
-        self._blobble_state[3] = self._food[self._blobble_state[0] - self._MIN_LOC][
-            self._blobble_state[1] - self._MIN_LOC]
+
+        if self._TASTE is False:
+            return 0  # Non-tasting blobble
+
+        food_array_row, food_array_column = self._position_in_food_array(self._blobble_state[0],
+                                                                         self._blobble_state[1])
+        return self._food[food_array_row, food_array_column]
 
     def step(self, action):
         """
@@ -213,22 +262,22 @@ class BlobbleEnv(gym.Env):
         observation, reward, done, {}
         """
 
-        if action < 5:  # Eat (if there is food)
+        if action > 4 or action == 0:  # Eat (if there is food)
             self._eat()
         else:
-            self._hunger += 1
+            self._hunger += 0.5
 
-        if (action == 1) or (action == 5):  # Move East
-            self._blobble_state[0] = min(self._blobble_state[0] + 1, self._MAX_LOC)
+        if (action == 1) or (action == 5):  # Move North
+            self._blobble_state[0] = min(self._blobble_state[0]+1, self._MAX_LOC)
         if (action == 2) or (action == 6):  # Move South
-            self._blobble_state[1] = max(self._blobble_state[1] - 1, self._MIN_LOC)
-        if (action == 3) or (action == 7):  # Move West
-            self._blobble_state[0] = max(self._blobble_state[0] - 1, self._MIN_LOC)
-        if (action == 4) or (action == 8):  # Move North
-            self._blobble_state[1] = min(self._blobble_state[1] + 1, self._MAX_LOC)
+            self._blobble_state[0] = max(self._blobble_state[0]-1, self._MIN_LOC)
+        if (action == 3) or (action == 7):  # Move East
+            self._blobble_state[1] = min(self._blobble_state[1]+1, self._MAX_LOC)
+        if (action == 4) or (action == 8):  # Move West
+            self._blobble_state[1] = max(self._blobble_state[1]-1, self._MIN_LOC)
 
-        self._taste()
-        self._smell()
+        self._blobble_state[3] = self._taste()
+        self._blobble_state[4:8] = self._smell()
 
         # Set game as done if the health of the blobble has gone to zero
         done = bool(self._blobble_state[2] <= 0)
@@ -243,7 +292,7 @@ class BlobbleEnv(gym.Env):
         else:
             self._best_episode = max(self._rewards_so_far, self._best_episode)
 
-        if self._hunger > 5:
+        if self._hunger > 5:  # Reduce health if the blobble is getting hungry
             self._blobble_state[2] = max(0, self._blobble_state[2] - 1)
 
         return self._blobble_state, reward, done, {}
@@ -258,6 +307,17 @@ class BlobbleEnv(gym.Env):
         """
 
         # Create the x and y location lists for rendering the food positions
+        # Note that here we:
+        #  - Select all the values which adhere to a specific criteria (such as self._food >3)
+        #    This gives a list of values [[row, column]...] such as [[0, 5], [0, 7] ... [20, 15] ]
+        #  - Transpose the resulting array.
+        #    This gives a list of all the row values and a list of all the column values, such as:
+        #    [[0, 0, ... 20]
+        #     [5, 7, ... 15]]
+        #  - shift the values by self.MIN_lOC to move the x, y coordinate space so that position [0, 0] appears
+        #    in the centre of blobble world. Like this (if MIN_LOC = -10):
+        #    [[-10, -10, ... 10]
+        #     [-5,  -2,  ... 5]]
         super_food = np.argwhere(self._food > 3).T + self._MIN_LOC
         good_food = np.argwhere((self._food > 0) & (self._food <= 3)).T + self._MIN_LOC
         unhealthy_food = np.argwhere((self._food < 0) & (self._food >= -3)).T + self._MIN_LOC
@@ -265,8 +325,8 @@ class BlobbleEnv(gym.Env):
 
         # Depict the food locations
         fig = go.Figure(data=go.Scatter(
-            x=super_food[0],
-            y=super_food[1],
+            x=super_food[1],   # x corresponds to columns
+            y=-super_food[0],  # y corresponds to rows
             name='Blobble Superfood',
             mode='markers',
             marker=dict(
@@ -277,8 +337,8 @@ class BlobbleEnv(gym.Env):
         )
 
         fig.add_trace(go.Scatter(
-            x=good_food[0],
-            y=good_food[1],
+            x=good_food[1],   # x corresponds to columns
+            y=-good_food[0],  # y corresponds to rows
             name='Good Food',
             mode='markers',
             marker=dict(
@@ -289,8 +349,8 @@ class BlobbleEnv(gym.Env):
         )
 
         fig.add_trace(go.Scatter(
-            x=unhealthy_food[0],
-            y=unhealthy_food[1],
+            x=unhealthy_food[1],   # x corresponds to columns
+            y=-unhealthy_food[0],  # y corresponds to rows
             name='Junk Food',
             mode='markers',
             marker=dict(
@@ -301,8 +361,8 @@ class BlobbleEnv(gym.Env):
         )
 
         fig.add_trace(go.Scatter(
-            x=bad_weed[0],
-            y=bad_weed[1],
+            x=bad_weed[1],   # x corresponds to columns
+            y=-bad_weed[0],  # y corresponds to rows
             name='Do Not Eat!',
             mode='markers',
             marker=dict(
@@ -312,43 +372,48 @@ class BlobbleEnv(gym.Env):
                 color='red'))
         )
 
+        # Now add the blobble.
+        # The blobble is depicted by an asterisk-open marker overlaid with a default (circle) marker
         fig.add_trace(go.Scatter(
-            x=[self._blobble_state[0]],
-            y=[self._blobble_state[1]],
+            x=[self._blobble_state[1]],  # x corresponds to columns
+            y=[self._blobble_state[0]],  # y corresponds to rows
             showlegend=False,
             mode='markers',
             marker=dict(
                 sizeref=self._SIZE_REF,
-                size=self._blobble_state[2]*5,
+                size=self._blobble_state[2] * 5,
                 symbol='asterisk-open',
                 color='gray',
                 line=dict(width=2, color='gray')
-                )
             )
         )
+        )
+
+        text_blobble = "Blobble (N="+str(self._blobble_state[0])+", E="+str(self._blobble_state[1])+")"
 
         fig.add_trace(go.Scatter(
-            x=[self._blobble_state[0]],
-            y=[self._blobble_state[1]],
-            text='Blobble',
+            x=[self._blobble_state[1]],  # x corresponds to columns
+            y=[self._blobble_state[0]],  # y corresponds to rows
+            text=text_blobble,
             showlegend=False,
             mode='markers',
             marker=dict(
                 sizeref=self._SIZE_REF,
-                size=self._blobble_state[2]*4,
+                size=self._blobble_state[2] * 4,
                 color=self._HEALTH_COLOURS[
                     int(self._blobble_state[2] / self._MAX_HEALTH * (len(self._HEALTH_COLOURS) - 1))],
                 line=dict(width=2, color='gray')
-                )
             )
         )
+        )
 
-        fig.update_yaxes(automargin=True, range=[self._MIN_LOC-0.5, self._MAX_LOC+0.5], nticks=40)
-        fig.update_xaxes(automargin=True, range=[self._MIN_LOC-0.5, self._MAX_LOC+0.5], nticks=40)
+        fig.update_yaxes(automargin=True, range=[self._MIN_LOC - 0.5, self._MAX_LOC + 0.5], nticks=40)
+        fig.update_xaxes(automargin=True, range=[self._MIN_LOC - 0.5, self._MAX_LOC + 0.5], nticks=40)
 
         fig.update_layout(
             title={
-                'text': str(self._episode-1)+'-score:'+str(self._rewards_so_far)+' ('+str(self._best_episode)+')',
+                'text': str(self._episode - 1) + '-score:' + str(self._rewards_so_far) + ' (' + str(
+                    self._best_episode) + ')',
                 'y': 0.5,
                 'x': 0.9,
                 'xanchor': 'center',
@@ -380,8 +445,37 @@ class BlobbleEnv(gym.Env):
         :return:
         """
         print('Blobble details are:')
-        print('  Health: ', self._blobble_state[2])
-        print('  Position x : ', self._blobble_state[0])
-        print('  Local nutrition : ', self._blobble_state[3])
-        print('  Remaining food :', len(self._food[0]))
-        print('  Blobble hunger: ', self._hunger)
+        print('  Health             : ', self._blobble_state[2])
+
+        print('  Position northerly : ', self._blobble_state[0])
+        print('  Position easterly  : ', self._blobble_state[1])
+
+        print('  Local nutrition    : ', self._blobble_state[3])
+        print('  Remaining food     :', len(self._food[0]))
+        print('  Blobble hunger     : ', self._hunger)
+
+    def reset_test(self, reset_state, reset_food, taste = True, smell = True):
+        """
+        For testing:
+        Allows reset of the food matrix and the location/health of the blobble
+
+                '''
+        Initialise
+
+        :param reset_state:
+        A numpy array depicting the reset state of the blobble. [northerly, easterly, health]
+
+        :param reset_food:
+        If reset_food==None, the food will be allocated randomly on each reset. This is the defauly.
+        Alternatively, a numpy array can be specified. This is especially useful for testing.
+
+        :return:
+        """
+        self._blobble_state[0:3] = deepcopy(reset_state)
+        self._food = deepcopy(reset_food)
+        self._TASTE = taste
+        self._SMELL = smell
+        self._blobble_state[3] = self._taste()
+        self._blobble_state[4:8] = self._smell()
+
+        return self._blobble_state
