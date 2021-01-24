@@ -8,6 +8,10 @@ learning.
 
 It's silly and created purely for fun.
 
+Instructions on how to run the code are in [GETTING_STARTED.md](https://github.com/katywarr/blobble-life/blob/master/GETTING-STARTED.md)
+
+Details of AI Gym are [here](https://github.com/openai/gym/blob/master/docs/creating-environments.md).
+
 ![Blobble Life Image](images/Blobble_Image.png)
 
 The blobble (in purple) can move around its world by taking one step on each turn (north, south, east, west). Before
@@ -132,53 +136,7 @@ And, for completemess, when the blobble returns no smell or taste information, o
 
 ## Running the Code
 
-From within an Anaconda command prompt, navigate to this cloned repository to create 
-a virtual environment.
-
-```
-conda env create -f blobble-life-gpu.yml
-conda activate blobble-life
-```
-
-For non-gpu execution, reinstall tensorflow:
-
-```
-conda install tensorflow
-```
-
-The AI Gym environment must be built and installed.
-
-From the cloned repo folder:
-
-```
-pip install -e .
-```
-
-Then, within python (or notebook):
-
-```
-import gym
-gym.make('gym_blobble:blobble-life-v0')
-```
-
-See details [here](https://github.com/openai/gym/blob/master/docs/creating-environments.md).
-
-To run the code:
-
-```
-   agent = QNetworkAgent('blobble-life-v0')
-   agent.run_agent(...)
-```
-
-```run_agent``` takes several parameters. Take a look in ```LearningBlobble.py``` for an example of the code above.
-
-The training step can be changed by updating the ```train_neural_network``` function's default parameters in the 
-same file. (To do: I will update to make this easier - using a configuration file).
-
-
- 
-
-
+Instructions on how to run the code are in [GETTING_STARTED.md](https://github.com/katywarr/blobble-life/blob/master/GETTING-STARTED.md)
 
 
 

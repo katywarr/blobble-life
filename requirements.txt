@@ -11,9 +11,9 @@ backcall=0.1.0=py37_0
 blas=1.0=mkl
 bleach=3.1.4=py_0
 blinker=1.4=py37_0
-ca-certificates=2020.1.1=0
+ca-certificates=2020.12.8=haa95532_0
 cachetools=3.1.1=py_0
-certifi=2020.4.5.1=py37_0
+certifi=2020.12.5=py37haa95532_0
 cffi=1.14.0=py37h7a1dbc1_0
 chardet=3.0.4=py37_1003
 click=7.1.1=py_0
@@ -26,7 +26,8 @@ cycler=0.10.0=py37_0
 decorator=4.4.2=py_0
 defusedxml=0.6.0=py_0
 entrypoints=0.3=py37_0
-ffmpeg=4.2=ha925a31_0
+ffmpeg=1.4=pypi_0
+ffmpy=0.2.2=pypi_0
 freetype=2.9.1=ha9979f8_1
 future=0.18.2=py37_0
 gast=0.2.2=py37_0
@@ -88,7 +89,7 @@ numpy=1.18.1=py37h93ca92e_0
 numpy-base=1.18.1=py37hc3f5095_1
 oauthlib=3.1.0=py_0
 olefile=0.46=py37_0
-openssl=1.1.1f=he774522_0
+openssl=1.1.1i=h2bbff1b_0
 opt_einsum=3.1.0=py_0
 packaging=20.3=py_0
 pandoc=2.2.3.2=0

@@ -1,8 +1,10 @@
-from gym_blobble.envs import BlobbleEnv
+from gym_blobble.BlobbleConfig import BlobbleConfig
+
 import imageio as imageio
-import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
+import datetime
+import os
 
 from tf_agents.environments import suite_gym
 from tf_agents.environments import tf_py_environment
@@ -24,34 +26,6 @@ def collect_step(environment, policy, buffer):
     buffer.add_batch(traj)
 
 
-def create_blobble_video(video_filename, num_episodes=1, fps=30):
-    filename = video_filename + ".mp4"
-
-    blobble_env = BlobbleEnv()
-
-    print('Observation space: ' + str(blobble_env.observation_space))
-    print('Action space:      ' + str(blobble_env.action_space))
-    num_observations = blobble_env.observation_space.shape[0]
-    num_actions = blobble_env.action_space.n
-
-    print(num_observations)
-    print(num_actions)
-
-    with imageio.get_writer(filename, fps=fps) as video:
-        for i in range(num_episodes):
-            print('Episode: ' + str(i))
-            blobble_env.reset([0, 0, 10])
-            done = False
-            while not done:
-                action = np.random.randint(8)
-                print('  Next Action: ', action)
-                observation, reward, done, _ = blobble_env.step(action)
-                # blobble_env.render_print()
-                # video.append_data(blobble_env.render(mode='rgb_array'))
-
-    blobble_env.close()
-
-
 def compute_avg_return(environment, policy, num_episodes=10):
     total_return = 0.0
     for i in range(num_episodes):
@@ -64,20 +38,24 @@ def compute_avg_return(environment, policy, num_episodes=10):
             episode_return += time_step.reward
         total_return += episode_return
 
-    avg_return = total_return / num_episodes
-
-    return avg_return.numpy()[0]
+    if num_episodes > 0:
+        avg_return = total_return / num_episodes
+        return avg_return.numpy()[0]
+    else:
+        return 0.0
 
 
 def train_neural_network(agent,
                          train_env,
                          eval_env,
-                         num_train_iterations=10000,
-                         num_eval_episodes=10,
-                         log_interval=200,
-                         eval_interval=1000,
-                         replay_buffer_max_length=100000,
-                         collect_steps_per_iteration=2):
+                         num_train_iterations,
+                         log_interval,
+                         eval_interval,
+                         num_eval_episodes,
+                         replay_buffer_max_length,
+                         collect_steps_per_iteration,
+                         output_folder,
+                         timestamp):
     print('Train the Network')
     replay_buffer_max_length = replay_buffer_max_length
     num_iterations = num_train_iterations
@@ -144,24 +122,20 @@ def train_neural_network(agent,
     plt.plot(iterations, returns)
     plt.ylabel('Average Return')
     plt.xlabel('Iterations')
-    # plt.ylim(top=250)
-    # plt.ion()  # Turn on interactive mode so the following line is non-blocking
-    plt.show()
+    filename = os.path.join(output_folder, timestamp + "-training_returns" + ".png")
+    plt.savefig(filename)
 
 
-def create_neural_network_agent(env):
+def create_neural_network_agent(env, learning_rate, fc_layer_params):
     # Create a neural network that can learn to predict the QValues (expected returns) for all the possible
     # Blobble actions, given a specific observation
-    # fc_layer_params = (100,)
-    fc_layer_params = (75, 40)
-
+    print('Creating Neural Network (layers={:s}, learning rate={:e})'.format(str(fc_layer_params), learning_rate))
     q_net = q_network.QNetwork(
         env.observation_spec(),
         env.action_spec(),
         fc_layer_params=fc_layer_params)
 
     # Now create the DqnAgent
-    learning_rate = 1e-3  # @param {type:"number"}
 
     optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate=learning_rate)
 
@@ -177,22 +151,19 @@ def create_neural_network_agent(env):
 
     agent.initialize()
 
+    # Let's take a look at the network
+    q_net.summary()
+
     return agent
 
 
-class QNetworkAgent():
+class QNetworkAgent:
     """
     Wrapper class to provide a Deep Neural Network agent for any provided tf-agent environment.
     """
 
     def __init__(self,
-                 env_name='blobble-world-v0',
-                 num_iterations=10000,
-                 num_eval_episodes=10,
-                 log_interval=200,
-                 eval_interval=1000,
-                 replay_buffer_max_length=100000,
-                 collect_steps_per_iteration=2
+                 env_name='blobble-world-v0'
                  ):
         """
         Initalise the agent by training a neural network for the passed tf-agent environment
@@ -201,6 +172,9 @@ class QNetworkAgent():
         Name of environment for the agent so solve
         """
         self._env_name = env_name
+
+        # Take a timestamp. This will be used for any output files created in the output folder
+        self._timestamp = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M")
 
         # Create training and evaluation environments
         self._train_py_env = suite_gym.load(self._env_name)
@@ -227,16 +201,41 @@ class QNetworkAgent():
         print('    ', self._eval_env.action_spec())
         print('=====================================================')
 
-        print('Create and train a neural network agent')
-        self._neural_network_agent = create_neural_network_agent(self._train_env)
+        self._config = BlobbleConfig('blobble_config.ini')
+        self._config.print_config()
 
+        # Get the demonstration parameters and output folder. We don't need these just yet but it's
+        # good to do now in case there is an error in the config file (exception will be thrown)
+        self._output_folder = (self._config.get_output_params()['output_folder'])
+
+        self._num_demo_episodes = int(self._config.get_output_params()['num_demonstration_episodes'])
+        demo_video = (self._config.get_output_params()['demonstration_video'])
+        if demo_video == 'True':
+            self._demo_video = True
+        else:
+            self._demo_video = False
+
+        # Get and check the advanced learning parameters
+        self._learning_rate = float(self._config.get_learning_adv_params()['learning_rate'])
+        self._fc_layer_params = tuple(self._config.get_learning_adv_params()['fc_layer_params'].split(','))
+
+        print('Create and train a neural network agent')
+        self._neural_network_agent = create_neural_network_agent(self._train_env,
+                                                                 self._learning_rate,
+                                                                 self._fc_layer_params)
+
+        learning_params = self._config.get_learning_params()
         train_neural_network(self._neural_network_agent,
                              self._train_env,
                              self._eval_env,
-                             num_eval_episodes=num_eval_episodes,
-                             log_interval=log_interval,
-                             eval_interval=eval_interval,
-                             collect_steps_per_iteration=collect_steps_per_iteration)
+                             num_train_iterations=learning_params['training_iterations'],
+                             log_interval=learning_params['training_log_interval'],
+                             eval_interval=learning_params['eval_interval'],
+                             num_eval_episodes=learning_params['num_eval_episodes'],
+                             replay_buffer_max_length=learning_params['replay_buffer_max_length'],
+                             collect_steps_per_iteration=learning_params['collect_steps_per_iteration'],
+                             output_folder=self._output_folder,
+                             timestamp=self._timestamp)
 
     def get_random_baseline_performance(self, iterations=10):
         """
@@ -249,23 +248,17 @@ class QNetworkAgent():
 
         return compute_avg_return(self._train_env, random_policy, iterations)
 
-    def run_agent(self, video_filename=None, num_episodes=50, fps=2, random=False):
+    def run_agent(self, fps=2, random=False):
         """
         Run iterations.
-        :param video_filename:
-        If specified, create a video of the iterations in the filename
-        :param num_episodes:
-        Number of episodes to run
         :param fps:
         Frames per second for video
-        :param policy:
-        For random behaviour, set policy as follows
+        :param random:
+        For random behaviour
         :return:
         """
         run_py_env = suite_gym.load(self._env_name)
         run_env = tf_py_environment.TFPyEnvironment(run_py_env)
-
-        filename = video_filename + ".mp4"
 
         if not random:
             policy = self._neural_network_agent.policy
@@ -273,33 +266,34 @@ class QNetworkAgent():
             policy = random_tf_policy.RandomTFPolicy(run_env.time_step_spec(),
                                                      run_env.action_spec())
 
-        if video_filename is not None:
-            with imageio.get_writer(filename, fps=fps) as video:
-                for episode in range(num_episodes):
-                    print('Episode: ', episode)
+        if self._num_demo_episodes > 0:
+            if self._demo_video:
+                filename = os.path.join(self._output_folder, self._timestamp + "-demonstration" + ".mp4")
+                with imageio.get_writer(filename, fps=fps) as video:
+                    for episode in range(self._num_demo_episodes):
+                        print('Demonstration Episode: ', episode+1)
+                        # Reset the evaluation environment
+                        time_step = run_env.reset()
+                        while not time_step.is_last():
+                            action_step = policy.action(time_step)
+                            time_step = run_env.step(action_step.action)
+                            tf.print('ACTION: ', action_step.action, time_step)
+                            video.append_data(run_py_env.render())
+                print('Demonstration video is in: '+filename)
+            else:
+                for episode in range(self._num_demo_episodes):
+                    print('Demonstration Episode: ', episode+1)
                     # Reset the evaluation environment
                     time_step = run_env.reset()
                     while not time_step.is_last():
                         action_step = policy.action(time_step)
                         time_step = run_env.step(action_step.action)
-                        tf.print(action_step.action, time_step)
-                        video.append_data(run_py_env.render())
-        else:
-            for episode in range(num_episodes):
-                print('Episode: ', episode)
-                # Reset the evaluation environment
-                time_step = run_env.reset()
-                while not time_step.is_last():
-                    action_step = policy.action(time_step)
-                    time_step = run_env.step(action_step.action)
-                    tf.print(action_step.action, time_step)
+                        tf.print('ACTION: ', action_step.action, time_step)
 
 
 def main():
-
     agent = QNetworkAgent('blobble-life-v0')
-
-    agent.run_agent('BlobbleVideo_smell_new1', num_episodes=3)
+    agent.run_agent()
 
 
 if __name__ == "__main__":

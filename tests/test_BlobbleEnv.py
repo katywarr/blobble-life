@@ -15,10 +15,10 @@ TEST_FOOD = np.array([
              [-2,  4, -3, -2, -2, -5, -5,  3, -2,  4, -5, -4, -1, -5, -4, -1,  3, -4, -5,  0,  0],
              [-5, -5,  3,  0, -1,  4,  5, -5, -5, -4, -5,  3,  2,  1, -2,  1,  1, -2,  3, -1, -5],
              [-3,  4, -5,  1, -5, -2,  0,  1,  1,  4,  5,  2,  1, -1, -2,  2,  2,  0,  1, -1, -2],
-             [-4, -2, -4,  4, -1, -4,  1,  0,  2,  4,  2,  5, -5, -1, -5,  3, -4,  2, -3, -5, -1],
+             [-4, -2, -4,  4, -1, -4,  1,  0,  2,  -1,  5,  5, -5, -1, -5,  3, -4,  2, -3, -5, -1],
              #                                         \/ Position 0,0
-             [1,   2, -3, -2,  1,  4, -4,  4,  2,  4,  0,  5, -5,  0,  2, -3, -3,  3, -2, -3,  0],
-             [2,   2,  0, -2, -5,  3, -2,  2,  2,  2,  0, -5, -5, -2, -3,  3,  3,  1,  5,  0, -1],
+             [1,   2, -3, -2,  1,  4, -4,  4,  2,  -1,  0,  0, -5,  0,  2, -3, -3,  3, -2, -3,  0],
+             [2,   2,  0, -2, -5,  3, -2,  2,  2,  2,  -3, -5, -5, -2, -3,  3,  3,  1,  5,  0, -1],
              [-1,  3, -2, -1,  3,  0, -5,  4,  1,  1,  0,  2,  1, -3, -3, -4,  0, -2,  5, -1,  2],
              [3,   2, -1,  4, -5, -2,  0, -3,  2,  2, -3, -2, -1,  5,  5,  3,  0, -1,  3, -3, -4],
              [4,   2,  5, -3,  5,  1,  3,  4,  2, -5, -5, -2,  4, -1,  3, -4, -2,  1,  0, -5, -1],
@@ -116,11 +116,11 @@ class TestBlobbleEnv(unittest.TestCase):
         blobble_env.reset_test([0, 0, 5], TEST_FOOD)
         observation, reward, done, _ = blobble_env.step(0)  # Eat food at current location
         '''
-        [ ., ., 5, ., .],
-        [ ., 4, 2, 5, .],
+        [ ., ., ., ., .],
+        [ ., 4, 2, 3, .],
         [ ., ., B, ., .]
         '''
-        self.assertEqual(4, observation[4], 'Should be sniff north=4')
+        self.assertEqual(3, observation[4], 'Should be sniff north=4')
 
     def test_smell_south(self):
         blobble_env = BlobbleEnv()
@@ -132,7 +132,7 @@ class TestBlobbleEnv(unittest.TestCase):
         [ ., 2, 0, -5 .],
         [ ., ., 0, ., .],
         '''
-        self.assertEqual(-0.75, observation[5], 'Should be sniff south=0.75')
+        self.assertEqual(-2, observation[5], 'Should be sniff south=0.75')
 
     def test_smell_east(self):
         blobble_env = BlobbleEnv()
@@ -141,7 +141,7 @@ class TestBlobbleEnv(unittest.TestCase):
         observation, reward, done, _ = blobble_env.step(0)  # Eat food at current location
         '''
         [ ., ., ., 5,.],
-        [ ., ., B, 5,-5],
+        [ ., ., B, 0, .],
         [ ., ., ., -5,.],
         '''
         self.assertEqual(0, observation[6], 'Should be sniff east=0')
@@ -156,7 +156,7 @@ class TestBlobbleEnv(unittest.TestCase):
         [ 2, 4, B, ., .],
         [ ., 2, ., ., .],
         '''
-        self.assertEqual(3, observation[7], 'Should be sniff west=3')
+        self.assertEqual(0, observation[7], 'Should be sniff west=3')
 
     def test_reward_eat_no_nutritional_value(self):
         blobble_env = BlobbleEnv()
@@ -171,6 +171,7 @@ class TestBlobbleEnv(unittest.TestCase):
         blobble_env.reset()
         blobble_env.reset_test([0, 0, 5], TEST_FOOD)
         observation, reward, done, _ = blobble_env.step(3)  # Move East
+        observation, reward, done, _ = blobble_env.step(1)  # Move North
         observation, reward, done, _ = blobble_env.step(0)  # Eat food=5
 
         self.assertEqual(10, observation[2], 'Should be health=10')

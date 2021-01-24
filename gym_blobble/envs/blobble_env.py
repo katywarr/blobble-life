@@ -8,6 +8,9 @@ from copy import deepcopy
 from gym import spaces, error, utils
 from gym.utils import seeding
 
+TASTE = True
+SMELL = True
+
 
 class BlobbleEnv(gym.Env):
     """
@@ -61,8 +64,8 @@ class BlobbleEnv(gym.Env):
 
         self.action_space = spaces.Discrete(9)
 
-        self._SMELL = True
-        self._TASTE = False
+        self._SMELL = SMELL
+        self._TASTE = TASTE
 
         self._MAX_HEALTH = 10
         self._MAX_LOC = 10
@@ -130,9 +133,6 @@ class BlobbleEnv(gym.Env):
         self._hunger = 0
         self._rewards_so_far = 0
 
-        taste = self._taste()
-        smell = self._smell()
-
         return self._blobble_state
 
     def seed(self, seed=None):
@@ -198,38 +198,38 @@ class BlobbleEnv(gym.Env):
         # Take a sniff north, south, east and west
 
         # Sniff North
-        # [ ., ., o, ., .],
+        # [ ., ., ., ., .],
         # [ ., o, o, o, .],
         # [ ., ., B, ., .]
-        smell_north = self._blobble_state[4] = np.average(np.array([self._sniff(food_array_row - 2, food_array_column),
+        smell_north = self._blobble_state[4] = np.average(np.array([
                                                           self._sniff(food_array_row - 1, food_array_column - 1),
                                                           self._sniff(food_array_row - 1, food_array_column),
                                                           self._sniff(food_array_row - 1, food_array_column + 1)]
-                                                                   ))
+                                                            ))
 
         # Sniff South
         # [ ., ., B, ., .],
         # [ ., o, o, o, .],
-        # [ ., ., o, ., .]
-        smell_south = self._blobble_state[5] = np.average(np.array([self._sniff(food_array_row + 2, food_array_column),
+        # [ ., ., ., ., .]
+        smell_south = self._blobble_state[5] = np.average(np.array([
                                                           self._sniff(food_array_row + 1, food_array_column - 1),
                                                           self._sniff(food_array_row + 1, food_array_column),
                                                           self._sniff(food_array_row + 1, food_array_column + 1)]
                                                                    ))
         # Sniff East
         # [ ., ., ., o, .],
-        # [ ., ., B, o, o],
+        # [ ., ., B, o, .],
         # [ ., ., ., o, .]
-        smell_east = self._blobble_state[6] = np.average(np.array([self._sniff(food_array_row, food_array_column + 2),
+        smell_east = self._blobble_state[6] = np.average(np.array([
                                                          self._sniff(food_array_row - 1, food_array_column + 1),
                                                          self._sniff(food_array_row, food_array_column + 1),
                                                          self._sniff(food_array_row + 1, food_array_column + 1)]
                                                                   ))
         # Sniff West
         # [ ., o, ., ., .],
-        # [ o, o, B, ., .],
+        # [ ., o, B, ., .],
         # [ ., o, ., ., .]
-        smell_west = self._blobble_state[7] = np.average(np.array([self._sniff(food_array_row, food_array_column - 2),
+        smell_west = self._blobble_state[7] = np.average(np.array([
                                                          self._sniff(food_array_row - 1, food_array_column - 1),
                                                          self._sniff(food_array_row, food_array_column - 1),
                                                          self._sniff(food_array_row + 1, food_array_column - 1)]
