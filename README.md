@@ -8,7 +8,7 @@ learning.
 
 It's silly and created purely for fun.
 
-Instructions on how to run the code are in [GETTING_STARTED.md](https://github.com/katywarr/blobble-life/blob/master/GETTING-STARTED.md)
+Instructions on how to run the code are in [GETTING_STARTED.md](https://github.com/katywarr/blobble-life/blob/master/GETTING_STARTED.md)
 
 Details of AI Gym are [here](https://github.com/openai/gym/blob/master/docs/creating-environments.md).
 
